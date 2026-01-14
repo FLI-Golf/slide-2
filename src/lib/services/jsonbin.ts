@@ -88,7 +88,7 @@ class JSONBinService {
         }
 
         try {
-            const response = await fetch(`${BASE_URL}/b/${this.binId}/latest`, {
+            const response = await fetch(`${BASE_URL}/b/${this.binId}`, {
                 method: 'GET',
                 headers: {
                     'X-Master-Key': API_KEY
