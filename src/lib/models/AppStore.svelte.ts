@@ -153,9 +153,17 @@ export class AppStore {
         const weekNum = this._weeks.length + 1;
         const newWeek = this.createWeek(`Week ${weekNum}`);
 
-        // Set date range (start from closed week's end)
-        const startDate = new Date(closedWeek.end);
-        const endDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+        // Set date range - start day after closed week's end
+        const closedEndDate = new Date(closedWeek.end);
+        // Add 1 day to get the next day, use noon to avoid timezone shifts
+        const startDate = new Date(closedEndDate);
+        startDate.setDate(startDate.getDate() + 1);
+        startDate.setHours(12, 0, 0, 0);
+        
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 6); // 7 day week (start + 6 days)
+        endDate.setHours(12, 0, 0, 0);
+        
         newWeek.start = startDate.toISOString();
         newWeek.end = endDate.toISOString();
 
