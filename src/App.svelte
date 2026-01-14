@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { appStore, type Week } from '$lib/models';
-	import { WeekList, WeekForm, WeekDetail, SyncStatus } from '$lib/components';
+	import { WeekList, WeekForm, WeekDetail, WeekHistory, SyncStatus } from '$lib/components';
 
 	// Initialize store on mount
 	$effect(() => {
@@ -86,7 +86,10 @@
 		{#if !appStore.initialized}
 			<p class="text-center text-gray-500">Loading...</p>
 		{:else if currentView === 'list'}
-			<WeekList onSelectWeek={handleSelectWeek} onCreateWeek={handleCreateWeek} />
+			<div class="space-y-6">
+				<WeekList onSelectWeek={handleSelectWeek} onCreateWeek={handleCreateWeek} />
+				<WeekHistory onSelectWeek={handleSelectWeek} />
+			</div>
 		{:else if currentView === 'create'}
 			<WeekForm onSave={handleSaveNewWeek} onCancel={handleCancel} />
 		{:else if currentView === 'edit' && selectedWeek}
