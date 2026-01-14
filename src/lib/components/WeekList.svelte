@@ -21,7 +21,7 @@
 			.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
 	);
 
-	// Calculate totals for active weeks
+	// Calculate totals for active weeks (read-only, no state mutation)
 	const activeWeeksTotals = $derived(() => {
 		let totalIn = 0;
 		let totalOut = 0;
@@ -29,7 +29,6 @@
 		let totalResult = 0;
 
 		for (const week of activeWeeks) {
-			week.calculateTotals();
 			totalIn += week.in_total;
 			totalOut += week.out_total;
 			totalVig += week.vig;
