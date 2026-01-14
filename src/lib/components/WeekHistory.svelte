@@ -12,11 +12,11 @@
 	const PAGE_SIZE = 5;
 	let currentPage = $state(1);
 
-	// Get closed weeks sorted by end date (most recent first)
+	// Get closed weeks sorted by start date (oldest first)
 	const closedWeeks = $derived(
 		appStore.weeks
 			.filter(w => w.isClosed)
-			.sort((a, b) => new Date(b.end).getTime() - new Date(a.end).getTime())
+			.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
 	);
 
 	const totalPages = $derived(Math.ceil(closedWeeks.length / PAGE_SIZE));
