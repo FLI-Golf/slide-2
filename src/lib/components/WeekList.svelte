@@ -14,14 +14,30 @@
 		return new Date(iso).toLocaleDateString();
 	};
 
-	const runningBalance = $derived(appStore.getRunningBalance());
-
 	// Only show active and pending_close weeks (not closed - those go in WeekHistory)
 	const activeWeeks = $derived(
 		appStore.weeks
 			.filter(w => !w.isClosed)
 			.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
 	);
+
+	// Calculate totals for active weeks
+	const activeWeeksTotals = $derived(() => {
+		let totalIn = 0;
+		let totalOut = 0;
+		let totalVig = 0;
+		let totalResult = 0;
+
+		for (const week of activeWeeks) {
+			week.calculateTotals();
+			totalIn += week.in_total;
+			totalOut += week.out_total;
+			totalVig += week.vig;
+			totalResult += week.result;
+		}
+
+		return { totalIn, totalOut, totalVig, totalResult };
+	});
 
 	const getStatusBadge = (status: string) => {
 		switch (status) {
@@ -34,26 +50,31 @@
 </script>
 
 <div class="space-y-4">
-	<!-- Running Balance Summary -->
-	{#if runningBalance.totalExpected > 0}
+	<!-- Active Weeks Summary -->
+	{#if activeWeeks.length > 0}
+		{@const totals = activeWeeksTotals()}
 		<Card class="w-full">
 			<Header>
-				<Title class="text-lg font-bold">Running Balance</Title>
+				<Title class="text-lg font-bold">Current Week Totals</Title>
 			</Header>
 			<Content class="p-4">
-				<div class="grid grid-cols-3 gap-4 text-center">
-					<div class="rounded-lg bg-blue-50 p-3">
-						<p class="text-sm text-gray-600">Total Expected</p>
-						<p class="text-xl font-bold text-blue-600">${runningBalance.totalExpected.toFixed(2)}</p>
-					</div>
+				<div class="grid grid-cols-4 gap-4 text-center">
 					<div class="rounded-lg bg-green-50 p-3">
-						<p class="text-sm text-gray-600">Total Collected</p>
-						<p class="text-xl font-bold text-green-600">${runningBalance.totalCollected.toFixed(2)}</p>
+						<p class="text-sm text-gray-600">In</p>
+						<p class="text-xl font-bold text-green-600">${totals.totalIn.toFixed(2)}</p>
 					</div>
-					<div class="rounded-lg {runningBalance.totalOutstanding > 0 ? 'bg-red-50' : 'bg-green-50'} p-3">
-						<p class="text-sm text-gray-600">Outstanding</p>
-						<p class="text-xl font-bold {runningBalance.totalOutstanding > 0 ? 'text-red-600' : 'text-green-600'}">
-							${runningBalance.totalOutstanding.toFixed(2)}
+					<div class="rounded-lg bg-red-50 p-3">
+						<p class="text-sm text-gray-600">Out</p>
+						<p class="text-xl font-bold text-red-600">${totals.totalOut.toFixed(2)}</p>
+					</div>
+					<div class="rounded-lg bg-yellow-50 p-3">
+						<p class="text-sm text-gray-600">Vig</p>
+						<p class="text-xl font-bold text-yellow-600">${totals.totalVig.toFixed(2)}</p>
+					</div>
+					<div class="rounded-lg {totals.totalResult >= 0 ? 'bg-green-100' : 'bg-red-100'} p-3">
+						<p class="text-sm text-gray-600">Result</p>
+						<p class="text-xl font-bold {totals.totalResult >= 0 ? 'text-green-700' : 'text-red-700'}">
+							${totals.totalResult.toFixed(2)}
 						</p>
 					</div>
 				</div>
