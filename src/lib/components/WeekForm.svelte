@@ -17,12 +17,18 @@
 	let end = $state(week?.end.split('T')[0] ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
 	let vig = $state(week?.vig ?? 0);
 
+	// Convert date string to ISO without timezone shift
+	const toLocalISOString = (dateStr: string) => {
+		// Append T12:00:00 to treat as noon local time, avoiding day shift
+		return new Date(`${dateStr}T12:00:00`).toISOString();
+	};
+
 	const handleSubmit = (e: Event) => {
 		e.preventDefault();
 		onSave({
 			name,
-			start: new Date(start).toISOString(),
-			end: new Date(end).toISOString(),
+			start: toLocalISOString(start),
+			end: toLocalISOString(end),
 			vig
 		});
 	};
