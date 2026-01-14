@@ -1,5 +1,7 @@
-const API_URL = 'https://api.jsonbin.io/v3/b';
+const BASE_URL = import.meta.env.VITE_JSONBIN_BASE_URL as string || 'https://api.jsonbin.io/v3';
 const API_KEY = import.meta.env.VITE_JSONBIN_API_KEY as string | undefined;
+const COLLECTION_ID = import.meta.env.VITE_JSONBIN_COLLECTION_ID as string | undefined;
+const FIXED_BIN_ID = import.meta.env.VITE_JSONBIN_BIN_ID as string | undefined;
 const BIN_ID_KEY = 'slide_jsonbin_id';
 
 export interface SyncStatus {
@@ -12,8 +14,10 @@ class JSONBinService {
     private binId: string | null = null;
 
     constructor() {
-        // Load bin ID from localStorage
-        if (typeof localStorage !== 'undefined') {
+        // Use fixed bin ID from env, or fall back to localStorage
+        if (FIXED_BIN_ID) {
+            this.binId = FIXED_BIN_ID;
+        } else if (typeof localStorage !== 'undefined') {
             this.binId = localStorage.getItem(BIN_ID_KEY);
         }
     }
@@ -42,15 +46,21 @@ class JSONBinService {
             return { success: false, error: 'API key not configured' };
         }
 
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'X-Master-Key': API_KEY,
+            'X-Bin-Name': 'slide-app-data',
+            'X-Bin-Private': 'true'
+        };
+
+        if (COLLECTION_ID) {
+            headers['X-Collection-Id'] = COLLECTION_ID;
+        }
+
         try {
-            const response = await fetch(API_URL, {
+            const response = await fetch(`${BASE_URL}/b`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': API_KEY,
-                    'X-Bin-Name': 'slide-app-data',
-                    'X-Bin-Private': 'true'
-                },
+                headers,
                 body: JSON.stringify(data)
             });
 
@@ -78,7 +88,7 @@ class JSONBinService {
         }
 
         try {
-            const response = await fetch(`${API_URL}/${this.binId}/latest`, {
+            const response = await fetch(`${BASE_URL}/b/${this.binId}/latest`, {
                 method: 'GET',
                 headers: {
                     'X-Master-Key': API_KEY
@@ -109,7 +119,7 @@ class JSONBinService {
         }
 
         try {
-            const response = await fetch(`${API_URL}/${this.binId}`, {
+            const response = await fetch(`${BASE_URL}/b/${this.binId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
