@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { appStore, type Week } from '$lib/models';
-	import { WeekList, WeekForm, WeekDetail } from '$lib/components';
+	import { WeekList, WeekForm, WeekDetail, SyncStatus } from '$lib/components';
 
 	// Initialize store on mount
 	$effect(() => {
@@ -75,9 +75,12 @@
 
 <main class="min-h-screen bg-gray-100 p-4 md:p-8">
 	<div class="mx-auto max-w-4xl">
-		<header class="mb-6">
-			<h1 class="text-3xl font-bold text-gray-900">Slide</h1>
-			<p class="text-gray-600">Weekly Player Tracking</p>
+		<header class="mb-6 flex items-start justify-between">
+			<div>
+				<h1 class="text-3xl font-bold text-gray-900">Slide</h1>
+				<p class="text-gray-600">Weekly Player Tracking</p>
+			</div>
+			<SyncStatus />
 		</header>
 
 		{#if !appStore.initialized}
