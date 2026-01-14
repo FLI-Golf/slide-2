@@ -11,6 +11,14 @@
 	type View = 'list' | 'create' | 'edit' | 'detail';
 	let currentView = $state<View>('list');
 	let selectedWeek = $state<Week | undefined>(undefined);
+	
+	// Tab state
+	type Tab = 'active' | 'history';
+	let currentTab = $state<Tab>('active');
+
+	// Counts for badges
+	const activeCount = $derived(appStore.weeks.filter(w => !w.isClosed).length);
+	const historyCount = $derived(appStore.weeks.filter(w => w.isClosed).length);
 
 	const handleSelectWeek = (week: Week) => {
 		selectedWeek = week;
@@ -86,9 +94,39 @@
 		{#if !appStore.initialized}
 			<p class="text-center text-gray-500">Loading...</p>
 		{:else if currentView === 'list'}
-			<div class="space-y-6">
-				<WeekList onSelectWeek={handleSelectWeek} onCreateWeek={handleCreateWeek} />
-				<WeekHistory onSelectWeek={handleSelectWeek} />
+			<div class="space-y-4">
+				<!-- Tab Buttons -->
+				<div class="flex gap-2">
+					<button
+						onclick={() => currentTab = 'active'}
+						class="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors {currentTab === 'active' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}"
+					>
+						Active
+						{#if activeCount > 0}
+							<span class="rounded-full px-2 py-0.5 text-xs {currentTab === 'active' ? 'bg-indigo-500 text-white' : 'bg-gray-300 text-gray-600'}">
+								{activeCount}
+							</span>
+						{/if}
+					</button>
+					<button
+						onclick={() => currentTab = 'history'}
+						class="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors {currentTab === 'history' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}"
+					>
+						History
+						{#if historyCount > 0}
+							<span class="rounded-full px-2 py-0.5 text-xs {currentTab === 'history' ? 'bg-indigo-500 text-white' : 'bg-gray-300 text-gray-600'}">
+								{historyCount}
+							</span>
+						{/if}
+					</button>
+				</div>
+
+				<!-- Tab Content -->
+				{#if currentTab === 'active'}
+					<WeekList onSelectWeek={handleSelectWeek} onCreateWeek={handleCreateWeek} />
+				{:else}
+					<WeekHistory onSelectWeek={handleSelectWeek} />
+				{/if}
 			</div>
 		{:else if currentView === 'create'}
 			<WeekForm onSave={handleSaveNewWeek} onCancel={handleCancel} />
