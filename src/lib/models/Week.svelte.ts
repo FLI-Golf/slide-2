@@ -254,10 +254,10 @@ export class Week {
         this.touch();
     }
 
-    // Mark all players with positive amounts as paid
+    // Mark all players as paid/settled (both in and out)
     markAllPaid() {
         this._players.forEach(p => {
-            if (p.totalOwed > 0) {
+            if (p.amount !== 0) {
                 p.markPaid();
             }
         });

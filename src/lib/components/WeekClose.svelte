@@ -130,13 +130,20 @@
 			{:else}
 				<div class="space-y-3">
 					{#each sortedPlayers as player (player.id)}
-						{@const isOwed = player.totalOwed > 0}
+						{@const isIn = player.amount > 0}
+						{@const isOut = player.amount < 0}
+						{@const hasAmount = player.amount !== 0}
 						<div class="rounded-lg border p-3 {player.payment_status === 'pending' ? 'border-orange-300 bg-orange-50' : 'border-gray-200'}">
 							<div class="flex items-start justify-between">
 								<div>
 									<div class="flex items-center gap-2">
 										<span class="font-medium">{player.name}</span>
 										<span class="text-sm text-gray-500">#{player.account_number}</span>
+										{#if isIn}
+											<span class="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">IN</span>
+										{:else if isOut}
+											<span class="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">OUT</span>
+										{/if}
 										<span class="rounded px-2 py-0.5 text-xs font-medium {getStatusBadge(player.payment_status)}">
 											{player.payment_status}
 										</span>
@@ -148,42 +155,58 @@
 										<span class={player.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
 											Amount: {player.amount >= 0 ? '+' : ''}${player.amount.toFixed(2)}
 										</span>
-										<span class="mx-2">→</span>
-										<span class="font-medium">Total Owed: ${player.totalOwed.toFixed(2)}</span>
+										{#if isIn}
+											<span class="mx-2">→</span>
+											<span class="font-medium">To Collect: ${player.totalOwed.toFixed(2)}</span>
+										{:else if isOut}
+											<span class="mx-2">→</span>
+											<span class="font-medium">To Pay Out: ${Math.abs(player.amount).toFixed(2)}</span>
+										{/if}
 									</div>
 									{#if player.payment_status === 'partial'}
 										<p class="text-sm text-yellow-600">
-											Paid: ${player.paid_amount.toFixed(2)} | Remaining: ${player.carryForward.toFixed(2)}
+											{isIn ? 'Collected' : 'Paid Out'}: ${player.paid_amount.toFixed(2)} | Remaining: ${Math.abs(player.carryForward).toFixed(2)}
 										</p>
 									{/if}
 								</div>
 
-								{#if isOwed && player.payment_status === 'pending'}
+								{#if hasAmount && player.payment_status === 'pending'}
 									<div class="flex flex-col gap-2">
 										<div class="flex gap-1">
-											<Button size="sm" onclick={() => handleMarkPaid(player.id)} class="bg-green-600 hover:bg-green-700">
-												Paid
-											</Button>
-											<Button size="sm" variant="outline" onclick={() => handleMarkUnpaid(player.id)} class="text-red-600 hover:bg-red-50">
-												Unpaid
-											</Button>
+											{#if isIn}
+												<Button size="sm" onclick={() => handleMarkPaid(player.id)} class="bg-green-600 hover:bg-green-700">
+													Collected
+												</Button>
+												<Button size="sm" variant="outline" onclick={() => handleMarkUnpaid(player.id)} class="text-red-600 hover:bg-red-50">
+													Not Collected
+												</Button>
+											{:else}
+												<Button size="sm" onclick={() => handleMarkPaid(player.id)} class="bg-blue-600 hover:bg-blue-700">
+													Paid Out
+												</Button>
+												<Button size="sm" variant="outline" onclick={() => handleMarkUnpaid(player.id)} class="text-orange-600 hover:bg-orange-50">
+													Carry (Not Paid)
+												</Button>
+											{/if}
 										</div>
-										<div class="flex gap-1">
-											<Input
-												type="number"
-												step="0.01"
-												min="0"
-												max={player.totalOwed}
-												placeholder="Partial $"
-												class="h-8 w-24 text-sm"
-												onchange={(e) => partialAmounts[player.id] = parseFloat((e.target as HTMLInputElement).value) || 0}
-											/>
-											<Button size="sm" variant="outline" onclick={() => handleMarkPartial(player.id)} class="text-yellow-600 hover:bg-yellow-50">
-												Partial
-											</Button>
-										</div>
+										{#if isIn}
+											<div class="flex gap-1">
+												<Input
+													type="number"
+													step="0.01"
+													min="0"
+													max={player.totalOwed}
+													placeholder="Partial $"
+													class="h-8 w-24 text-sm"
+													onchange={(e) => partialAmounts[player.id] = parseFloat((e.target as HTMLInputElement).value) || 0}
+												/>
+												<Button size="sm" variant="outline" onclick={() => handleMarkPartial(player.id)} class="text-yellow-600 hover:bg-yellow-50">
+													Partial
+												</Button>
+											</div>
+										{/if}
 									</div>
-								{:else if isOwed}
+								{:else if hasAmount}
 									<Button size="sm" variant="ghost" onclick={() => {
 										const p = week.getPlayer(player.id);
 										if (p) {
@@ -195,7 +218,7 @@
 										Reset
 									</Button>
 								{:else}
-									<span class="text-sm text-gray-400">No payment needed</span>
+									<span class="text-sm text-gray-400">No amount</span>
 								{/if}
 							</div>
 						</div>
