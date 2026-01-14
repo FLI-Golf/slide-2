@@ -16,6 +16,13 @@
 
 	const runningBalance = $derived(appStore.getRunningBalance());
 
+	// Only show active and pending_close weeks (not closed - those go in WeekHistory)
+	const activeWeeks = $derived(
+		appStore.weeks
+			.filter(w => !w.isClosed)
+			.sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
+	);
+
 	const getStatusBadge = (status: string) => {
 		switch (status) {
 			case 'active': return 'bg-green-100 text-green-700';
@@ -57,15 +64,15 @@
 	<!-- Weeks List -->
 	<Card class="w-full">
 		<Header class="flex flex-row items-center justify-between">
-			<Title class="text-xl font-bold">Weeks</Title>
+			<Title class="text-xl font-bold">Active Weeks</Title>
 			<Button onclick={onCreateWeek} size="sm">+ New Week</Button>
 		</Header>
 		<Content class="p-4">
-			{#if appStore.weeks.length === 0}
-				<p class="text-center text-gray-500">No weeks yet. Create one to get started.</p>
+			{#if activeWeeks.length === 0}
+				<p class="text-center text-gray-500">No active weeks. Create one to get started.</p>
 			{:else}
 				<div class="space-y-2">
-					{#each appStore.weeks as week (week.id)}
+					{#each activeWeeks as week (week.id)}
 						<button
 							class="w-full rounded-lg border p-3 text-left transition-colors hover:bg-gray-50 {appStore.activeWeekId === week.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'}"
 							onclick={() => onSelectWeek(week)}
