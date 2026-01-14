@@ -3,8 +3,6 @@ import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 import { defineConfig } from 'vite';
 
-const host = process.env.TAURI_DEV_HOST;
-
 export default defineConfig({
 	plugins: [svelte({ compilerOptions: { runes: true } }), tailwindcss()],
 	resolve: {
@@ -13,13 +11,10 @@ export default defineConfig({
 		}
 	},
 	server: {
-		port: 1420,
-		strictPort: true,
-		host: host || false,
-		hmr: host ? { protocol: 'ws', host, port: 1421 } : undefined,
-		watch: {
-			ignored: ['**/src-tauri/**']
-		}
+		host: '0.0.0.0',
+		port: 5173,
+		strictPort: false,
+		allowedHosts: ['.gitpod.dev']
 	},
 	envPrefix: ['VITE_', 'TAURI_ENV_*'],
 	build: {
