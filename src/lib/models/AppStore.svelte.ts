@@ -1,5 +1,5 @@
 import { Week, type WeekData } from './Week.svelte';
-import { Player, type PlayerData } from './Player.svelte';
+import { Player, type PlayerData, type CarryPayment } from './Player.svelte';
 import { jsonBinService } from '$lib/services';
 
 const STORAGE_KEY = 'slide_app_data';
@@ -54,6 +54,15 @@ export class AppStore {
         return this._players.length;
     }
 
+    // Players with outstanding carry balances
+    get playersWithCarry() {
+        return this._players.filter(p => p.hasCarry);
+    }
+
+    get totalOutstandingCarry() {
+        return this._players.reduce((sum, p) => sum + p.carry_balance, 0);
+    }
+
     // Initialization
     async init() {
         if (this._initialized) return;
@@ -65,6 +74,37 @@ export class AppStore {
         // Then try to sync from cloud
         if (jsonBinService.isConfigured) {
             await this.syncFromCloud();
+        }
+
+        // Migrate: backfill carry_balance from closed weeks for data created before carry tracking
+        this.migrateCarryBalances();
+    }
+
+    /**
+     * One-time migration: scan closed weeks for unpaid/partial carries
+     * and backfill roster Player.carry_balance if it's currently 0.
+     * Only runs if no players have a carry_balance yet (pre-migration data).
+     */
+    private migrateCarryBalances() {
+        const anyHasCarry = this._players.some(p => p.carry_balance > 0);
+        if (anyHasCarry) return; // Already migrated
+
+        let migrated = false;
+        for (const week of this._weeks) {
+            if (!week.isClosed) continue;
+            for (const pw of week.players) {
+                if (pw.carryForward > 0) {
+                    const rosterPlayer = this.getPlayerByAccount(pw.account_number);
+                    if (rosterPlayer) {
+                        rosterPlayer.addCarry(pw.carryForward);
+                        migrated = true;
+                    }
+                }
+            }
+        }
+
+        if (migrated) {
+            this.save();
         }
     }
 
@@ -92,6 +132,43 @@ export class AppStore {
 
     getPlayerByAccount(account_number: number): Player | undefined {
         return this._players.find(p => p.account_number === account_number);
+    }
+
+    // Carry Payment Management
+
+    /** Record a lump-sum payment against a player's total carry balance */
+    recordCarryPayment(accountNumber: number, amount: number, note: string = ''): CarryPayment | null {
+        const player = this.getPlayerByAccount(accountNumber);
+        if (!player) return null;
+        const payment = player.recordPayment(amount, note);
+        this.save();
+        return payment;
+    }
+
+    /** Record a payment against a specific week's carry */
+    recordWeekCarryPayment(accountNumber: number, amount: number, weekId: string, note: string = ''): CarryPayment | null {
+        const player = this.getPlayerByAccount(accountNumber);
+        if (!player) return null;
+        const payment = player.recordPayment(amount, note, weekId);
+        this.save();
+        return payment;
+    }
+
+    /** Pay off a player's entire carry balance */
+    payOffAllCarry(accountNumber: number, note: string = ''): CarryPayment | null {
+        const player = this.getPlayerByAccount(accountNumber);
+        if (!player) return null;
+        const payment = player.payOffAll(note);
+        if (payment) this.save();
+        return payment;
+    }
+
+    /** Undo a carry payment */
+    undoCarryPayment(accountNumber: number, paymentId: string) {
+        const player = this.getPlayerByAccount(accountNumber);
+        if (!player) return;
+        player.removePayment(paymentId);
+        this.save();
     }
 
     // Week Management
@@ -144,6 +221,58 @@ export class AppStore {
         return newWeek;
     }
 
+    /**
+     * Close a week and update player carry balances.
+     * Called after all players have been reviewed (paid/unpaid/partial).
+     */
+    closeWeekAndUpdateCarries(weekId: string) {
+        const week = this.getWeek(weekId);
+        if (!week) return;
+
+        // Ensure carried players are marked unpaid before calculating carry forwards.
+        for (const pw of week.players) {
+            if (pw.carried && pw.payment_status === 'pending') {
+                pw.markUnpaid();
+            }
+        }
+
+        // For each player with a carry forward, update their roster carry_balance
+        for (const pw of week.players) {
+            const carryFwd = pw.carryForward;
+            if (carryFwd > 0) {
+                const rosterPlayer = this.getPlayerByAccount(pw.account_number);
+                if (rosterPlayer) {
+                    rosterPlayer.addCarry(carryFwd);
+                }
+            }
+        }
+
+        week.finalizeClose();
+        this.save();
+    }
+
+    /**
+     * Reopen a closed week. Reverses carry balance additions.
+     */
+    reopenWeek(weekId: string) {
+        const week = this.getWeek(weekId);
+        if (!week || !week.isClosed) return;
+
+        // Reverse carry additions
+        for (const pw of week.players) {
+            const carryFwd = pw.carryForward;
+            if (carryFwd > 0) {
+                const rosterPlayer = this.getPlayerByAccount(pw.account_number);
+                if (rosterPlayer) {
+                    rosterPlayer.removeCarry(carryFwd);
+                }
+            }
+        }
+
+        week.cancelClose();
+        this.save();
+    }
+
     // Create next week from a closed week with carry forwards
     createNextWeekFromClosed(closedWeekId: string): Week | undefined {
         const closedWeek = this.getWeek(closedWeekId);
@@ -155,13 +284,12 @@ export class AppStore {
 
         // Set date range - start day after closed week's end
         const closedEndDate = new Date(closedWeek.end);
-        // Add 1 day to get the next day, use noon to avoid timezone shifts
         const startDate = new Date(closedEndDate);
         startDate.setDate(startDate.getDate() + 1);
         startDate.setHours(12, 0, 0, 0);
         
         const endDate = new Date(startDate);
-        endDate.setDate(endDate.getDate() + 6); // 7 day week (start + 6 days)
+        endDate.setDate(endDate.getDate() + 6);
         endDate.setHours(12, 0, 0, 0);
         
         newWeek.start = startDate.toISOString();
@@ -171,13 +299,16 @@ export class AppStore {
         newWeek.previous_week_id = closedWeek.id;
         closedWeek.next_week_id = newWeek.id;
 
-        // Get carry forward data
+        // Only add players who owe money (carry forward > 0)
         const carries = closedWeek.getCarryForwardData();
-
-        // Add players with carry amounts
         for (const carry of carries) {
             const newPlayer = newWeek.addPlayer(carry.name, carry.account_number);
             newPlayer.carryOver(carry.carry_amount, closedWeek.id);
+
+            const rosterPlayer = this.getPlayerByAccount(carry.account_number);
+            if (rosterPlayer) {
+                newPlayer.prior_carry_balance = rosterPlayer.carry_balance;
+            }
         }
 
         newWeek.calculateTotals();
@@ -218,6 +349,24 @@ export class AppStore {
             totalOutstanding: totalExpected - totalCollected,
             weeklyBreakdown
         };
+    }
+
+    /** Per-player carry breakdown: which weeks contributed to their balance */
+    getPlayerCarryBreakdown(accountNumber: number): { weekId: string; weekName: string; amount: number }[] {
+        const breakdown: { weekId: string; weekName: string; amount: number }[] = [];
+        for (const week of this._weeks) {
+            if (week.isClosed) {
+                const pw = week.getPlayerByAccount(accountNumber);
+                if (pw && pw.carryForward > 0) {
+                    breakdown.push({
+                        weekId: week.id,
+                        weekName: week.name,
+                        amount: pw.carryForward
+                    });
+                }
+            }
+        }
+        return breakdown;
     }
 
     // Persistence - Local Storage
@@ -272,7 +421,6 @@ export class AppStore {
         if (result.success) {
             this._syncState = 'success';
             this._lastSynced = new Date().toISOString();
-            // Reset to idle after 2 seconds
             setTimeout(() => {
                 if (this._syncState === 'success') {
                     this._syncState = 'idle';
@@ -294,7 +442,7 @@ export class AppStore {
 
         if (result.success && result.data) {
             this.applyAppData(result.data);
-            this.saveLocal(); // Update local storage with cloud data
+            this.saveLocal();
             this._syncState = 'success';
             this._lastSynced = new Date().toISOString();
             setTimeout(() => {
@@ -304,7 +452,6 @@ export class AppStore {
             }, 2000);
             return true;
         } else if (result.error === 'No bin ID stored') {
-            // No cloud data yet, that's okay
             this._syncState = 'idle';
             return false;
         } else {
@@ -318,7 +465,6 @@ export class AppStore {
     save() {
         this.saveLocal();
 
-        // Debounce cloud sync to avoid too many API calls
         if (this._saveTimeout) {
             clearTimeout(this._saveTimeout);
         }
@@ -326,7 +472,7 @@ export class AppStore {
         if (jsonBinService.isConfigured) {
             this._saveTimeout = setTimeout(() => {
                 this.syncToCloud();
-            }, 1000); // Wait 1 second after last change before syncing
+            }, 1000);
         }
     }
 
@@ -346,7 +492,6 @@ export class AppStore {
         if (typeof localStorage !== 'undefined') {
             localStorage.removeItem(STORAGE_KEY);
         }
-        // Also clear cloud data
         if (jsonBinService.isConfigured) {
             this.syncToCloud();
         }

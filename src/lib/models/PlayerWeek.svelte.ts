@@ -9,11 +9,13 @@ export interface PlayerWeekData {
     amount: number;
     carried: boolean;
     carry_amount: number;
-    carry_from_week_id: string | null;  // Track which week the carry came from
+    carry_from_week_id: string | null;
+    // Accumulated carry balance from the Player roster at the time this week was active
+    prior_carry_balance: number;
     result: number;
     payment_status: PaymentStatus;
-    paid_amount: number;  // How much they actually paid
-    paid_date: string | null;  // When they paid
+    paid_amount: number;
+    paid_date: string | null;
     note: string;
     created: string;
     updated: string;
@@ -28,6 +30,7 @@ export class PlayerWeek {
         carried: false,
         carry_amount: 0,
         carry_from_week_id: null,
+        prior_carry_balance: 0,
         result: 0,
         payment_status: 'pending',
         paid_amount: 0,
@@ -53,6 +56,7 @@ export class PlayerWeek {
     get carried() { return this._state.carried; }
     get carry_amount() { return this._state.carry_amount; }
     get carry_from_week_id() { return this._state.carry_from_week_id; }
+    get prior_carry_balance() { return this._state.prior_carry_balance; }
     get result() { return this._state.result; }
     get payment_status() { return this._state.payment_status; }
     get paid_amount() { return this._state.paid_amount; }
@@ -90,6 +94,11 @@ export class PlayerWeek {
         this.touch();
     }
 
+    set prior_carry_balance(value: number) {
+        this._state.prior_carry_balance = value;
+        this.touch();
+    }
+
     set note(value: string) {
         this._state.note = value;
         this.touch();
@@ -100,15 +109,25 @@ export class PlayerWeek {
     get isOut() { return this._state.amount < 0; }
     get absoluteAmount() { return Math.abs(this._state.amount); }
     
-    // Vig is 15% of amount, only if player is "in" (lost)
-    get vig() { return this._state.amount > 0 ? this._state.amount * 0.15 : 0; }
+    // Vig shown in the week totals — excluded for carried players
+    get vig() { return (this._state.amount > 0 && !this._state.carried) ? this._state.amount * 0.15 : 0; }
     
     // Player's result from their perspective (inverted)
     get playerResult() { return -this._state.result; }
 
-    // Total owed including any carry
-    get totalOwed() { 
-        return this._state.amount + (this._state.carried ? this._state.carry_amount : 0); 
+    /**
+     * Total owed to collect from this player at week close.
+     * This is just the amount + any prior carry. Vig is handled at the week level.
+     */
+    get totalOwed() {
+        const carry = this._state.carried ? this._state.carry_amount : 0;
+        return Math.max(0, this._state.amount + carry);
+    }
+
+    // Full accumulated balance: this week's owed + prior accumulated carry from roster
+    get accumulatedOwed() {
+        const thisWeek = this._state.amount > 0 ? this._state.amount : 0;
+        return thisWeek + this._state.prior_carry_balance;
     }
 
     // Outstanding balance (what's still owed after payment)
@@ -119,12 +138,23 @@ export class PlayerWeek {
         return this.totalOwed; // pending
     }
 
-    // Amount to carry forward to next week
+    /**
+     * Amount to carry forward to next week.
+     * Vig is only added when the player is carried (their vig was excluded from
+     * week totals). Regular unpaid players already had vig in the week totals.
+     */
     get carryForward() {
-        if (this._state.payment_status === 'paid') return 0;
-        if (this._state.payment_status === 'unpaid') return this.totalOwed;
-        if (this._state.payment_status === 'partial') return this.totalOwed - this._state.paid_amount;
-        return 0;
+        if (this._state.payment_status === 'paid' || this._state.payment_status === 'pending') return 0;
+
+        const owed = this.totalOwed;
+        if (owed <= 0) return 0;
+
+        if (this._state.payment_status === 'partial') {
+            return Math.max(0, owed - this._state.paid_amount);
+        }
+
+        // unpaid — full amount carries forward
+        return owed;
     }
 
     // Methods
@@ -133,8 +163,8 @@ export class PlayerWeek {
     }
 
     private calculateResult() {
-        // Result = amount + carry_amount (if carried)
-        this._state.result = this._state.amount + (this._state.carried ? this._state.carry_amount : 0);
+        // Result is only this week's win/loss — carry is tracked separately
+        this._state.result = this._state.amount;
     }
 
     setIn(amount: number) {
@@ -199,11 +229,11 @@ export class PlayerWeek {
         const player = new PlayerWeek();
         player._state = {
             ...data,
-            // Migration for old data without new fields
             payment_status: data.payment_status || 'pending',
             paid_amount: data.paid_amount || 0,
             paid_date: data.paid_date || null,
-            carry_from_week_id: data.carry_from_week_id || null
+            carry_from_week_id: data.carry_from_week_id || null,
+            prior_carry_balance: data.prior_carry_balance || 0
         };
         return player;
     }

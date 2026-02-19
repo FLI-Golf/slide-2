@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { type PlayerWeek } from '$lib/models';
+	import { type PlayerWeek, appStore } from '$lib/models';
 	import { Button } from '$lib/components/ui/button';
 	import { Card, Header, Title, Content } from '$lib/components/ui/card';
 
@@ -12,8 +12,13 @@
 
 	let { players, onAddPlayer, onEditPlayer, onDeletePlayer }: Props = $props();
 
-	type SortField = 'name' | 'account_number' | 'amount' | 'vig' | 'carry_amount' | 'result';
+	type SortField = 'name' | 'account_number' | 'amount' | 'vig' | 'carry_in' | 'total_owed' | 'balance' | 'result';
 	type SortDirection = 'asc' | 'desc';
+
+	const getPlayerCarryBalance = (accountNumber: number): number => {
+		const rosterPlayer = appStore.getPlayerByAccount(accountNumber);
+		return rosterPlayer?.carry_balance ?? 0;
+	};
 
 	let sortField = $state<SortField>('account_number');
 	let sortDirection = $state<SortDirection>('asc');
@@ -48,12 +53,20 @@
 				aVal = a.vig;
 				bVal = b.vig;
 				break;
-			case 'carry_amount':
+			case 'carry_in':
 				aVal = a.carried ? a.carry_amount : 0;
 				bVal = b.carried ? b.carry_amount : 0;
 				break;
+			case 'total_owed':
+				aVal = a.totalOwed;
+				bVal = b.totalOwed;
+				break;
+			case 'balance':
+				aVal = getPlayerCarryBalance(a.account_number);
+				bVal = getPlayerCarryBalance(b.account_number);
+				break;
 			case 'result':
-				aVal = -a.result; // Player perspective
+				aVal = -a.result;
 				bVal = -b.result;
 				break;
 			default:
@@ -92,7 +105,7 @@
 							</th>
 							<th class="pb-2 font-medium">
 								<button onclick={() => toggleSort('account_number')} class="hover:text-indigo-600">
-									Account #{getSortIndicator('account_number')}
+									Acct #{getSortIndicator('account_number')}
 								</button>
 							</th>
 							<th class="pb-2 text-right font-medium">
@@ -106,8 +119,18 @@
 								</button>
 							</th>
 							<th class="pb-2 text-right font-medium">
-								<button onclick={() => toggleSort('carry_amount')} class="hover:text-indigo-600">
-									Carry{getSortIndicator('carry_amount')}
+								<button onclick={() => toggleSort('carry_in')} class="hover:text-indigo-600">
+									Carry In{getSortIndicator('carry_in')}
+								</button>
+							</th>
+							<th class="pb-2 text-right font-medium">
+								<button onclick={() => toggleSort('total_owed')} class="hover:text-indigo-600">
+									Total Owed{getSortIndicator('total_owed')}
+								</button>
+							</th>
+							<th class="pb-2 text-right font-medium">
+								<button onclick={() => toggleSort('balance')} class="hover:text-indigo-600">
+									Balance{getSortIndicator('balance')}
 								</button>
 							</th>
 							<th class="pb-2 text-right font-medium">
@@ -120,19 +143,30 @@
 					</thead>
 					<tbody>
 						{#each sortedPlayers as player (player.id)}
-							<tr class="border-b last:border-0">
+							{@const rosterBalance = getPlayerCarryBalance(player.account_number)}
+							<tr class="border-b last:border-0 {player.carried ? 'bg-orange-50/50' : ''}">
 								<td class="py-3">
-									<span class="font-medium">{player.name}</span>
+									<div class="flex items-center gap-1.5">
+										<span class="font-medium">{player.name}</span>
+										{#if player.carried}
+											<span class="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700">CARRY</span>
+										{/if}
+									</div>
+									{#if player.carried}
+										<p class="text-xs text-orange-600">Carrying from prev week — excluded from In/Vig/Result</p>
+									{/if}
 									{#if player.note}
 										<p class="text-xs text-gray-500">{player.note}</p>
 									{/if}
 								</td>
 								<td class="py-3 text-gray-600">{player.account_number}</td>
+								<!-- Amount: this week's win/loss only -->
 								<td class="py-3 text-right">
 									<span class={player.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
 										{player.amount >= 0 ? '+' : ''}{player.amount}
 									</span>
 								</td>
+								<!-- Vig: 15% of amount if in -->
 								<td class="py-3 text-right">
 									{#if player.vig > 0}
 										<span class="text-yellow-600">{player.vig.toFixed(2)}</span>
@@ -140,14 +174,36 @@
 										<span class="text-gray-400">-</span>
 									{/if}
 								</td>
+								<!-- Carry In: amount carried from previous week -->
 								<td class="py-3 text-right">
 									{#if player.carried}
-										<span class="text-yellow-600">{player.carry_amount}</span>
+										<span class="text-orange-600 font-medium">${player.carry_amount.toFixed(2)}</span>
 									{:else}
 										<span class="text-gray-400">-</span>
 									{/if}
 								</td>
-								<td class="py-3 text-right font-medium {-player.result >= 0 ? 'text-green-600' : 'text-red-600'}" title="Player's perspective">
+								<!-- Total Owed: amount + carry (what needs to be collected) -->
+								<td class="py-3 text-right">
+									{#if player.totalOwed > 0}
+										<span class="font-medium text-red-600">${player.totalOwed.toFixed(2)}</span>
+									{:else if player.amount < 0}
+										<span class="font-medium text-green-600">-${Math.abs(player.amount).toFixed(2)}</span>
+									{:else}
+										<span class="text-gray-400">-</span>
+									{/if}
+								</td>
+								<!-- Balance: running carry balance from roster -->
+								<td class="py-3 text-right">
+									{#if rosterBalance > 0}
+										<span class="rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-600">
+											${rosterBalance.toFixed(2)}
+										</span>
+									{:else}
+										<span class="text-gray-400">-</span>
+									{/if}
+								</td>
+								<!-- Result: this week only (player perspective) -->
+								<td class="py-3 text-right font-medium {-player.result >= 0 ? 'text-green-600' : 'text-red-600'}" title="Player's perspective (this week only)">
 									{-player.result >= 0 ? '+' : ''}{-player.result}
 								</td>
 								<td class="py-3 text-right">

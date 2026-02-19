@@ -8,3 +8,4 @@ export { default as PlayerForm } from './PlayerForm.svelte';
 export { default as PlayerRoster } from './PlayerRoster.svelte';
 export { default as PlayerDropZone } from './PlayerDropZone.svelte';
 export { default as SyncStatus } from './SyncStatus.svelte';
+export { default as CarryLedger } from './CarryLedger.svelte';

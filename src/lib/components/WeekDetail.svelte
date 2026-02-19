@@ -30,13 +30,17 @@
 		return new Date(iso).toLocaleDateString();
 	};
 
-	const handleAddPlayer = (data: { name: string; account_number: number; amount: number }) => {
+	const handleAddPlayer = (data: { name: string; account_number: number; amount: number; note?: string; carried?: boolean; carry_amount?: number }) => {
 		const player = week.addPlayer(data.name, data.account_number);
 		if (data.amount > 0) {
 			player.setIn(data.amount);
 		} else if (data.amount < 0) {
 			player.setOut(Math.abs(data.amount));
 		}
+		if (data.carried) {
+			player.carryOver(data.carry_amount ?? 0);
+		}
+		if (data.note) player.note = data.note;
 		week.calculateTotals();
 		appStore.save();
 		showAddPlayer = false;
@@ -55,13 +59,19 @@
 		appStore.save();
 	};
 
-	const handleEditPlayer = (data: { name: string; account_number: number; amount: number }) => {
+	const handleEditPlayer = (data: { name: string; account_number: number; amount: number; note?: string; carried?: boolean; carry_amount?: number }) => {
 		if (!editingPlayerId) return;
 		const player = week.getPlayer(editingPlayerId);
 		if (player) {
 			player.name = data.name;
 			player.account_number = data.account_number;
 			player.amount = data.amount;
+			if (data.note !== undefined) player.note = data.note;
+			if (data.carried) {
+				player.carryOver(data.carry_amount ?? 0);
+			} else {
+				player.clearCarry();
+			}
 			week.calculateTotals();
 			appStore.save();
 		}
@@ -83,18 +93,21 @@
 	};
 
 	const handleFinalizeClose = () => {
-		// Week is now closed, offer to create next week
-		if (onCreateNextWeek && week.total_carried_out > 0) {
-			if (confirm(`Week closed. Create next week with $${week.total_carried_out.toFixed(2)} in carries?`)) {
-				onCreateNextWeek();
-			}
+		if (!onCreateNextWeek) return;
+
+		const carryOut = week.total_carried_out;
+		const msg = carryOut > 0
+			? `Week closed. Create next week with $${carryOut.toFixed(2)} in carries?`
+			: 'Week closed. Create next week?';
+
+		if (confirm(msg)) {
+			onCreateNextWeek();
 		}
 	};
 
 	const handleReopenWeek = () => {
-		if (confirm('Reopen this week? This will reset all payment statuses.')) {
-			week.cancelClose();
-			appStore.save();
+		if (confirm('Reopen this week? This will reset all payment statuses and reverse carry balance changes.')) {
+			appStore.reopenWeek(week.id);
 		}
 	};
 
@@ -122,7 +135,12 @@
 {#if week.isPendingClose}
 	<!-- Week Close Review Mode -->
 	<div class="space-y-4">
-		<Button variant="ghost" size="sm" onclick={onBack} class="mb-2">← Back</Button>
+		<div class="flex items-center justify-between">
+			<Button variant="ghost" size="sm" onclick={onBack} class="mb-2">← Back</Button>
+			<Button variant="outline" size="sm" onclick={handleDeleteWeek} class="text-red-600 hover:bg-red-50">
+				Delete Week
+			</Button>
+		</div>
 		<WeekClose 
 			{week} 
 			onCancel={handleCancelClose} 
@@ -188,6 +206,7 @@
 						</p>
 					</div>
 				</div>
+
 
 				{#if week.isClosed}
 					<!-- Show collection summary for closed weeks -->

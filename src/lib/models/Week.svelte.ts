@@ -166,20 +166,24 @@ export class Week {
     }
 
     calculateTotals() {
+        // Carried players are excluded from In/Out/Vig/Result — their amount
+        // is tracked but doesn't affect the week's numbers
         this._state.in_total = this._players
-            .filter(p => p.amount > 0)
+            .filter(p => p.amount > 0 && !p.carried)
             .reduce((sum, p) => sum + p.amount, 0);
         
         this._state.out_total = this._players
-            .filter(p => p.amount < 0)
+            .filter(p => p.amount < 0 && !p.carried)
             .reduce((sum, p) => sum + Math.abs(p.amount), 0);
         
-        // Vig is 15% of all "in" amounts (players who lost)
-        this._state.vig = this._players.reduce((sum, p) => sum + p.vig, 0);
+        // Vig only on non-carried "in" players
+        this._state.vig = this._players
+            .filter(p => !p.carried)
+            .reduce((sum, p) => sum + p.vig, 0);
         
         this._state.result = this._state.in_total - this._state.out_total - this._state.vig;
 
-        // Calculate carried in (from previous week)
+        // Carried in from previous weeks (the carry_amount on carried players)
         this._state.total_carried_in = this._players
             .filter(p => p.carried)
             .reduce((sum, p) => sum + p.carry_amount, 0);
@@ -257,7 +261,8 @@ export class Week {
     // Mark all players as paid/settled (both in and out)
     markAllPaid() {
         this._players.forEach(p => {
-            if (p.amount !== 0) {
+            // Skip carried players — they carry forward, not pay
+            if (p.amount !== 0 && !p.carried) {
                 p.markPaid();
             }
         });

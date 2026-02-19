@@ -12,11 +12,34 @@
 
 	let { week, onCancel, onFinalize }: Props = $props();
 
+	// Auto-mark carried players as unpaid on mount — they're already carrying
+	// Auto-mark on mount:
+	// - Carried players → unpaid (carrying forward)
+	// - OUT players (winners) → paid (they collect immediately)
+	$effect(() => {
+		for (const player of week.players) {
+			if (player.payment_status !== 'pending') continue;
+			if (player.carried) {
+				player.markUnpaid();
+			} else if (player.amount < 0) {
+				player.markPaid();
+			}
+		}
+		week.calculateTotals();
+		appStore.save();
+	});
+
 	// Sort players by account number
 	const sortedPlayers = $derived([...week.players].sort((a, b) => a.account_number - b.account_number));
 
 	// Track partial payment amounts
 	let partialAmounts = $state<Record<string, number>>({});
+
+	// Look up accumulated carry from the roster for each player
+	const getAccumulatedCarry = (accountNumber: number): number => {
+		const rosterPlayer = appStore.getPlayerByAccount(accountNumber);
+		return rosterPlayer?.carry_balance ?? 0;
+	};
 
 	const handleMarkPaid = (playerId: string) => {
 		const player = week.getPlayer(playerId);
@@ -58,8 +81,7 @@
 	};
 
 	const handleFinalizeClose = () => {
-		week.finalizeClose();
-		appStore.save();
+		appStore.closeWeekAndUpdateCarries(week.id);
 		onFinalize();
 	};
 
@@ -112,7 +134,7 @@
 				<div class="mt-1 h-2 w-full rounded-full bg-gray-200">
 					<div 
 						class="h-2 rounded-full bg-indigo-500 transition-all"
-						style="width: {((week.players.length - week.playersPending.length) / week.players.length) * 100}%"
+						style="width: {((week.players.length - week.playersPending.length) / Math.max(week.players.length, 1)) * 100}%"
 					></div>
 				</div>
 			</div>
@@ -133,13 +155,16 @@
 						{@const isIn = player.amount > 0}
 						{@const isOut = player.amount < 0}
 						{@const hasAmount = player.amount !== 0}
-						<div class="rounded-lg border p-3 {player.payment_status === 'pending' ? 'border-orange-300 bg-orange-50' : 'border-gray-200'}">
+						{@const accumulatedCarry = getAccumulatedCarry(player.account_number)}
+						<div class="rounded-lg border p-3 {player.carried ? 'border-orange-300 bg-orange-50/70' : player.payment_status === 'pending' ? 'border-orange-300 bg-orange-50' : 'border-gray-200'}">
 							<div class="flex items-start justify-between">
 								<div>
 									<div class="flex items-center gap-2">
 										<span class="font-medium">{player.name}</span>
 										<span class="text-sm text-gray-500">#{player.account_number}</span>
-										{#if isIn}
+										{#if player.carried}
+											<span class="rounded bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-700">CARRYING</span>
+										{:else if isIn}
 											<span class="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">IN</span>
 										{:else if isOut}
 											<span class="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-700">OUT</span>
@@ -150,19 +175,36 @@
 									</div>
 									<div class="mt-1 text-sm text-gray-600">
 										{#if player.carried}
-											<span class="text-yellow-600">Carry: ${player.carry_amount.toFixed(2)}</span> + 
-										{/if}
-										<span class={player.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
-											Amount: {player.amount >= 0 ? '+' : ''}${player.amount.toFixed(2)}
-										</span>
-										{#if isIn}
+											<span class="text-orange-600">Carry: ${player.carry_amount.toFixed(2)}</span>
+											{#if player.amount > 0}
+												<span> + Amount: +${player.amount.toFixed(2)}</span>
+											{/if}
 											<span class="mx-2">→</span>
-											<span class="font-medium">To Collect: ${player.totalOwed.toFixed(2)}</span>
-										{:else if isOut}
-											<span class="mx-2">→</span>
-											<span class="font-medium">To Pay Out: ${Math.abs(player.amount).toFixed(2)}</span>
+											<span class="font-medium text-orange-700">Carrying forward: ${player.totalOwed.toFixed(2)}</span>
+										{:else}
+											<span class={player.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
+												Amount: {player.amount >= 0 ? '+' : ''}${player.amount.toFixed(2)}
+											</span>
+											{#if isIn}
+												<span class="mx-2">→</span>
+												<span class="font-medium">To Collect: ${player.totalOwed.toFixed(2)}</span>
+											{:else if isOut}
+												<span class="mx-2">→</span>
+												<span class="font-medium">To Pay Out: ${Math.abs(player.amount).toFixed(2)}</span>
+											{/if}
 										{/if}
 									</div>
+									{#if player.carried}
+										<p class="mt-1 text-xs text-orange-600">Auto-marked as carrying — will carry forward to next week</p>
+									{/if}
+									<!-- Accumulated carry balance from roster -->
+									{#if accumulatedCarry > 0 && !player.carried}
+										<div class="mt-1 text-xs">
+											<span class="rounded bg-red-50 px-1.5 py-0.5 text-red-600">
+												Running balance: ${accumulatedCarry.toFixed(2)} across all weeks
+											</span>
+										</div>
+									{/if}
 									{#if player.payment_status === 'partial'}
 										<p class="text-sm text-yellow-600">
 											{isIn ? 'Collected' : 'Paid Out'}: ${player.paid_amount.toFixed(2)} | Remaining: ${Math.abs(player.carryForward).toFixed(2)}
@@ -170,7 +212,23 @@
 									{/if}
 								</div>
 
-								{#if hasAmount && player.payment_status === 'pending'}
+								<!-- Action buttons -->
+								{#if player.carried}
+									<!-- Carried players are auto-handled, but allow override -->
+									<div class="flex flex-col items-end gap-1">
+										<span class="text-xs text-orange-600">Auto-carried</span>
+										<Button size="sm" variant="ghost" class="h-6 text-xs" onclick={() => {
+											const p = week.getPlayer(player.id);
+											if (p) {
+												p.resetPaymentStatus();
+												week.calculateTotals();
+												appStore.save();
+											}
+										}}>
+											Override
+										</Button>
+									</div>
+								{:else if hasAmount && player.payment_status === 'pending'}
 									<div class="flex flex-col gap-2">
 										<div class="flex gap-1">
 											{#if isIn}

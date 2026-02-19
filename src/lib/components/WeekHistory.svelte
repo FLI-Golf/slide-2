@@ -9,14 +9,75 @@
 
 	let { onSelectWeek }: Props = $props();
 
+	type SortField = 'name' | 'dates' | 'in' | 'out' | 'vig' | 'result' | 'collected';
+	type SortDirection = 'asc' | 'desc';
+
+	let sortField = $state<SortField>('dates');
+	let sortDirection = $state<SortDirection>('asc');
+
 	const PAGE_SIZE = 5;
 	let currentPage = $state(1);
 
-	// Get closed weeks sorted by start date (oldest first)
+	const toggleSort = (field: SortField) => {
+		if (sortField === field) {
+			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortField = field;
+			sortDirection = 'asc';
+		}
+		currentPage = 1;
+	};
+
+	const getSortIndicator = (field: SortField) => {
+		if (sortField !== field) return '';
+		return sortDirection === 'asc' ? ' ↑' : ' ↓';
+	};
+
 	const closedWeeks = $derived(
 		appStore.weeks
 			.filter(w => w.isClosed)
-			.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+			.sort((a, b) => {
+				let aVal: string | number;
+				let bVal: string | number;
+
+				switch (sortField) {
+					case 'name':
+						aVal = a.name.toLowerCase();
+						bVal = b.name.toLowerCase();
+						break;
+					case 'dates':
+						aVal = new Date(a.start).getTime();
+						bVal = new Date(b.start).getTime();
+						break;
+					case 'in':
+						aVal = a.in_total;
+						bVal = b.in_total;
+						break;
+					case 'out':
+						aVal = a.out_total;
+						bVal = b.out_total;
+						break;
+					case 'vig':
+						aVal = a.vig;
+						bVal = b.vig;
+						break;
+					case 'result':
+						aVal = a.result;
+						bVal = b.result;
+						break;
+					case 'collected':
+						aVal = a.actual_collected;
+						bVal = b.actual_collected;
+						break;
+					default:
+						aVal = new Date(a.start).getTime();
+						bVal = new Date(b.start).getTime();
+				}
+
+				if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+				if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+				return 0;
+			})
 	);
 
 	const totalPages = $derived(Math.ceil(closedWeeks.length / PAGE_SIZE));
@@ -47,13 +108,41 @@
 				<table class="w-full">
 					<thead>
 						<tr class="border-b text-left text-sm text-gray-600">
-							<th class="pb-2 font-medium">Week</th>
-							<th class="pb-2 font-medium">Dates</th>
-							<th class="pb-2 text-right font-medium">In</th>
-							<th class="pb-2 text-right font-medium">Out</th>
-							<th class="pb-2 text-right font-medium">Vig</th>
-							<th class="pb-2 text-right font-medium">Result</th>
-							<th class="pb-2 text-right font-medium">Collected</th>
+							<th class="pb-2 font-medium">
+								<button onclick={() => toggleSort('name')} class="hover:text-indigo-600">
+									Week{getSortIndicator('name')}
+								</button>
+							</th>
+							<th class="pb-2 font-medium">
+								<button onclick={() => toggleSort('dates')} class="hover:text-indigo-600">
+									Dates{getSortIndicator('dates')}
+								</button>
+							</th>
+							<th class="pb-2 text-right font-medium">
+								<button onclick={() => toggleSort('in')} class="hover:text-indigo-600">
+									In{getSortIndicator('in')}
+								</button>
+							</th>
+							<th class="pb-2 text-right font-medium">
+								<button onclick={() => toggleSort('out')} class="hover:text-indigo-600">
+									Out{getSortIndicator('out')}
+								</button>
+							</th>
+							<th class="pb-2 text-right font-medium">
+								<button onclick={() => toggleSort('vig')} class="hover:text-indigo-600">
+									Vig{getSortIndicator('vig')}
+								</button>
+							</th>
+							<th class="pb-2 text-right font-medium">
+								<button onclick={() => toggleSort('result')} class="hover:text-indigo-600">
+									Result{getSortIndicator('result')}
+								</button>
+							</th>
+							<th class="pb-2 text-right font-medium">
+								<button onclick={() => toggleSort('collected')} class="hover:text-indigo-600">
+									Collected{getSortIndicator('collected')}
+								</button>
+							</th>
 							<th class="pb-2 text-right font-medium">Actions</th>
 						</tr>
 					</thead>

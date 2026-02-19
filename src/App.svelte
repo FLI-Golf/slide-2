@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { appStore, type Week } from '$lib/models';
-	import { WeekList, WeekForm, WeekDetail, WeekHistory, SyncStatus } from '$lib/components';
+	import { WeekList, WeekForm, WeekDetail, WeekHistory, SyncStatus, CarryLedger } from '$lib/components';
 
 	// Initialize store on mount
 	$effect(() => {
@@ -13,12 +13,13 @@
 	let selectedWeek = $state<Week | undefined>(undefined);
 	
 	// Tab state
-	type Tab = 'active' | 'history';
+	type Tab = 'active' | 'history' | 'balances';
 	let currentTab = $state<Tab>('active');
 
 	// Counts for badges
 	const activeCount = $derived(appStore.weeks.filter(w => !w.isClosed).length);
 	const historyCount = $derived(appStore.weeks.filter(w => w.isClosed).length);
+	const carryCount = $derived(appStore.playersWithCarry.length);
 
 	const handleSelectWeek = (week: Week) => {
 		selectedWeek = week;
@@ -119,13 +120,16 @@
 							</span>
 						{/if}
 					</button>
+
 				</div>
 
 				<!-- Tab Content -->
 				{#if currentTab === 'active'}
 					<WeekList onSelectWeek={handleSelectWeek} onCreateWeek={handleCreateWeek} />
-				{:else}
+				{:else if currentTab === 'history'}
 					<WeekHistory onSelectWeek={handleSelectWeek} />
+				{:else if currentTab === 'balances'}
+					<CarryLedger />
 				{/if}
 			</div>
 		{:else if currentView === 'create'}
