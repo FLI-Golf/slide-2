@@ -112,8 +112,8 @@ export class PlayerWeek {
     // Vig shown in the week totals — excluded for carried players
     get vig() { return (this._state.amount > 0 && !this._state.carried) ? this._state.amount * 0.15 : 0; }
     
-    // Player's result from their perspective (inverted)
-    get playerResult() { return -this._state.result; }
+    // Player's result from their perspective — carried players have no result
+    get playerResult() { return this._state.carried ? 0 : -this._state.result; }
 
     /**
      * Total owed to collect from this player at week close.
@@ -163,8 +163,9 @@ export class PlayerWeek {
     }
 
     private calculateResult() {
-        // Result is only this week's win/loss — carry is tracked separately
-        this._state.result = this._state.amount;
+        // Result is only this week's win/loss — carried players have no result
+        // since their amount is excluded from the week's action
+        this._state.result = this._state.carried ? 0 : this._state.amount;
     }
 
     setIn(amount: number) {

@@ -192,9 +192,13 @@
 										<span class="text-gray-400">-</span>
 									{/if}
 								</td>
-								<!-- Balance: running carry balance from roster -->
+								<!-- Balance: for carried players show totalOwed, otherwise roster balance -->
 								<td class="py-3 text-right">
-									{#if rosterBalance > 0}
+									{#if player.carried}
+										<span class="rounded bg-orange-50 px-1.5 py-0.5 text-xs font-medium text-orange-600">
+											${player.totalOwed.toFixed(2)}
+										</span>
+									{:else if rosterBalance > 0}
 										<span class="rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-600">
 											${rosterBalance.toFixed(2)}
 										</span>
@@ -203,8 +207,8 @@
 									{/if}
 								</td>
 								<!-- Result: this week only (player perspective) -->
-								<td class="py-3 text-right font-medium {-player.result >= 0 ? 'text-green-600' : 'text-red-600'}" title="Player's perspective (this week only)">
-									{-player.result >= 0 ? '+' : ''}{-player.result}
+								<td class="py-3 text-right font-medium {player.playerResult >= 0 ? 'text-green-600' : 'text-red-600'}" title="Player's perspective (this week only)">
+									{player.playerResult >= 0 ? '+' : ''}{player.playerResult}
 								</td>
 								<td class="py-3 text-right">
 									<div class="flex justify-end gap-1">

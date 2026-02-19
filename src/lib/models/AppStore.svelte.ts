@@ -75,37 +75,6 @@ export class AppStore {
         if (jsonBinService.isConfigured) {
             await this.syncFromCloud();
         }
-
-        // Migrate: backfill carry_balance from closed weeks for data created before carry tracking
-        this.migrateCarryBalances();
-    }
-
-    /**
-     * One-time migration: scan closed weeks for unpaid/partial carries
-     * and backfill roster Player.carry_balance if it's currently 0.
-     * Only runs if no players have a carry_balance yet (pre-migration data).
-     */
-    private migrateCarryBalances() {
-        const anyHasCarry = this._players.some(p => p.carry_balance > 0);
-        if (anyHasCarry) return; // Already migrated
-
-        let migrated = false;
-        for (const week of this._weeks) {
-            if (!week.isClosed) continue;
-            for (const pw of week.players) {
-                if (pw.carryForward > 0) {
-                    const rosterPlayer = this.getPlayerByAccount(pw.account_number);
-                    if (rosterPlayer) {
-                        rosterPlayer.addCarry(pw.carryForward);
-                        migrated = true;
-                    }
-                }
-            }
-        }
-
-        if (migrated) {
-            this.save();
-        }
     }
 
     // Player Roster Management
