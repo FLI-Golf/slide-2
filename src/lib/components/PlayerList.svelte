@@ -12,8 +12,40 @@
 
 	let { players, onAddPlayer, onEditPlayer, onDeletePlayer }: Props = $props();
 
-	type SortField = 'name' | 'account_number' | 'amount' | 'vig' | 'carry_in' | 'total_owed' | 'balance' | 'result';
+	type SortField = 'account_number' | 'name' | 'amount' | 'vig' | 'carry_in' | 'total_owed' | 'balance' | 'result';
 	type SortDirection = 'asc' | 'desc';
+
+	// Column definitions
+	const allColumns = [
+		{ key: 'account_number' as SortField, label: 'Acct #', align: 'left', defaultVisible: true },
+		{ key: 'name' as SortField, label: 'Name', align: 'left', defaultVisible: true },
+		{ key: 'amount' as SortField, label: 'Amount', align: 'right', defaultVisible: true },
+		{ key: 'vig' as SortField, label: 'Vig (15%)', align: 'right', defaultVisible: true },
+		{ key: 'carry_in' as SortField, label: 'Carry In', align: 'right', defaultVisible: true },
+		{ key: 'total_owed' as SortField, label: 'Total Owed', align: 'right', defaultVisible: true },
+		{ key: 'balance' as SortField, label: 'Balance', align: 'right', defaultVisible: false },
+		{ key: 'result' as SortField, label: 'Result', align: 'right', defaultVisible: true },
+	] as const;
+
+	// Load saved column visibility from localStorage
+	const COLUMNS_KEY = 'slide_player_columns';
+	const loadVisibility = (): Record<string, boolean> => {
+		try {
+			const saved = localStorage.getItem(COLUMNS_KEY);
+			if (saved) return JSON.parse(saved);
+		} catch {}
+		return Object.fromEntries(allColumns.map(c => [c.key, c.defaultVisible]));
+	};
+
+	let columnVisibility = $state<Record<string, boolean>>(loadVisibility());
+	let showColumnMenu = $state(false);
+
+	const toggleColumn = (key: string) => {
+		columnVisibility[key] = !columnVisibility[key];
+		localStorage.setItem(COLUMNS_KEY, JSON.stringify(columnVisibility));
+	};
+
+	const visibleColumns = $derived(allColumns.filter(c => columnVisibility[c.key]));
 
 	const getPlayerCarryBalance = (accountNumber: number): number => {
 		const rosterPlayer = appStore.getPlayerByAccount(accountNumber);
@@ -62,12 +94,12 @@
 				bVal = b.totalOwed;
 				break;
 			case 'balance':
-				aVal = getPlayerCarryBalance(a.account_number);
-				bVal = getPlayerCarryBalance(b.account_number);
+				aVal = a.carried ? a.totalOwed : getPlayerCarryBalance(a.account_number);
+				bVal = b.carried ? b.totalOwed : getPlayerCarryBalance(b.account_number);
 				break;
 			case 'result':
-				aVal = -a.result;
-				bVal = -b.result;
+				aVal = a.playerResult;
+				bVal = b.playerResult;
 				break;
 			default:
 				aVal = a.account_number;
@@ -88,7 +120,34 @@
 <Card class="w-full">
 	<Header class="flex flex-row items-center justify-between">
 		<Title class="text-xl font-bold">Players ({players.length})</Title>
-		<Button onclick={onAddPlayer} size="sm">+ Add Player</Button>
+		<div class="flex items-center gap-2">
+			<!-- Column toggle -->
+			<div class="relative">
+				<Button variant="outline" size="sm" onclick={() => showColumnMenu = !showColumnMenu}>
+					Columns
+				</Button>
+				{#if showColumnMenu}
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<div class="fixed inset-0 z-10" onclick={() => showColumnMenu = false}></div>
+					<div class="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border bg-white p-2 shadow-lg">
+						<p class="mb-1 text-xs font-medium text-gray-500">Show/Hide Columns</p>
+						{#each allColumns as col}
+							<label class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-gray-50">
+								<input
+									type="checkbox"
+									checked={columnVisibility[col.key]}
+									onchange={() => toggleColumn(col.key)}
+									class="rounded"
+								/>
+								{col.label}
+							</label>
+						{/each}
+					</div>
+				{/if}
+			</div>
+			<Button onclick={onAddPlayer} size="sm">+ Add Player</Button>
+		</div>
 	</Header>
 	<Content class="p-4">
 		{#if players.length === 0}
@@ -98,46 +157,13 @@
 				<table class="w-full">
 					<thead>
 						<tr class="border-b text-left text-sm text-gray-600">
-							<th class="pb-2 font-medium">
-								<button onclick={() => toggleSort('name')} class="hover:text-indigo-600">
-									Name{getSortIndicator('name')}
-								</button>
-							</th>
-							<th class="pb-2 font-medium">
-								<button onclick={() => toggleSort('account_number')} class="hover:text-indigo-600">
-									Acct #{getSortIndicator('account_number')}
-								</button>
-							</th>
-							<th class="pb-2 text-right font-medium">
-								<button onclick={() => toggleSort('amount')} class="hover:text-indigo-600">
-									Amount{getSortIndicator('amount')}
-								</button>
-							</th>
-							<th class="pb-2 text-right font-medium">
-								<button onclick={() => toggleSort('vig')} class="hover:text-indigo-600">
-									Vig (15%){getSortIndicator('vig')}
-								</button>
-							</th>
-							<th class="pb-2 text-right font-medium">
-								<button onclick={() => toggleSort('carry_in')} class="hover:text-indigo-600">
-									Carry In{getSortIndicator('carry_in')}
-								</button>
-							</th>
-							<th class="pb-2 text-right font-medium">
-								<button onclick={() => toggleSort('total_owed')} class="hover:text-indigo-600">
-									Total Owed{getSortIndicator('total_owed')}
-								</button>
-							</th>
-							<th class="pb-2 text-right font-medium">
-								<button onclick={() => toggleSort('balance')} class="hover:text-indigo-600">
-									Balance{getSortIndicator('balance')}
-								</button>
-							</th>
-							<th class="pb-2 text-right font-medium">
-								<button onclick={() => toggleSort('result')} class="hover:text-indigo-600">
-									Result{getSortIndicator('result')}
-								</button>
-							</th>
+							{#each visibleColumns as col}
+								<th class="pb-2 {col.align === 'right' ? 'text-right' : ''} font-medium">
+									<button onclick={() => toggleSort(col.key)} class="hover:text-indigo-600">
+										{col.label}{getSortIndicator(col.key)}
+									</button>
+								</th>
+							{/each}
 							<th class="pb-2 text-right font-medium">Actions</th>
 						</tr>
 					</thead>
@@ -145,71 +171,76 @@
 						{#each sortedPlayers as player (player.id)}
 							{@const rosterBalance = getPlayerCarryBalance(player.account_number)}
 							<tr class="border-b last:border-0 {player.carried ? 'bg-orange-50/50' : ''}">
-								<td class="py-3">
-									<div class="flex items-center gap-1.5">
-										<span class="font-medium">{player.name}</span>
-										{#if player.carried}
-											<span class="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700">CARRY</span>
-										{/if}
-									</div>
-									{#if player.carried}
-										<p class="text-xs text-orange-600">Carrying from prev week — excluded from In/Vig/Result</p>
+								{#each visibleColumns as col}
+									{#if col.key === 'account_number'}
+										<td class="py-3 text-gray-600">{player.account_number}</td>
+									{:else if col.key === 'name'}
+										<td class="py-3">
+											<div class="flex items-center gap-1.5">
+												<span class="font-medium">{player.name}</span>
+												{#if player.carried}
+													<span class="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700">CARRY</span>
+												{/if}
+											</div>
+											{#if player.carried}
+												<p class="text-xs text-orange-600">Carrying from prev week — excluded from In/Vig/Result</p>
+											{/if}
+											{#if player.note}
+												<p class="text-xs text-gray-500">{player.note}</p>
+											{/if}
+										</td>
+									{:else if col.key === 'amount'}
+										<td class="py-3 text-right">
+											<span class={player.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
+												{player.amount >= 0 ? '+' : ''}{player.amount}
+											</span>
+										</td>
+									{:else if col.key === 'vig'}
+										<td class="py-3 text-right">
+											{#if player.vig > 0}
+												<span class="text-yellow-600">{player.vig.toFixed(2)}</span>
+											{:else}
+												<span class="text-gray-400">-</span>
+											{/if}
+										</td>
+									{:else if col.key === 'carry_in'}
+										<td class="py-3 text-right">
+											{#if player.carried}
+												<span class="text-orange-600 font-medium">${player.carry_amount.toFixed(2)}</span>
+											{:else}
+												<span class="text-gray-400">-</span>
+											{/if}
+										</td>
+									{:else if col.key === 'total_owed'}
+										<td class="py-3 text-right">
+											{#if player.totalOwed > 0}
+												<span class="font-medium text-red-600">${player.totalOwed.toFixed(2)}</span>
+											{:else if player.amount < 0}
+												<span class="font-medium text-green-600">-${Math.abs(player.amount).toFixed(2)}</span>
+											{:else}
+												<span class="text-gray-400">-</span>
+											{/if}
+										</td>
+									{:else if col.key === 'balance'}
+										<td class="py-3 text-right">
+											{#if player.carried}
+												<span class="rounded bg-orange-50 px-1.5 py-0.5 text-xs font-medium text-orange-600">
+													${player.totalOwed.toFixed(2)}
+												</span>
+											{:else if rosterBalance > 0}
+												<span class="rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-600">
+													${rosterBalance.toFixed(2)}
+												</span>
+											{:else}
+												<span class="text-gray-400">-</span>
+											{/if}
+										</td>
+									{:else if col.key === 'result'}
+										<td class="py-3 text-right font-medium {player.playerResult >= 0 ? 'text-green-600' : 'text-red-600'}">
+											{player.playerResult >= 0 ? '+' : ''}{player.playerResult}
+										</td>
 									{/if}
-									{#if player.note}
-										<p class="text-xs text-gray-500">{player.note}</p>
-									{/if}
-								</td>
-								<td class="py-3 text-gray-600">{player.account_number}</td>
-								<!-- Amount: this week's win/loss only -->
-								<td class="py-3 text-right">
-									<span class={player.amount >= 0 ? 'text-green-600' : 'text-red-600'}>
-										{player.amount >= 0 ? '+' : ''}{player.amount}
-									</span>
-								</td>
-								<!-- Vig: 15% of amount if in -->
-								<td class="py-3 text-right">
-									{#if player.vig > 0}
-										<span class="text-yellow-600">{player.vig.toFixed(2)}</span>
-									{:else}
-										<span class="text-gray-400">-</span>
-									{/if}
-								</td>
-								<!-- Carry In: amount carried from previous week -->
-								<td class="py-3 text-right">
-									{#if player.carried}
-										<span class="text-orange-600 font-medium">${player.carry_amount.toFixed(2)}</span>
-									{:else}
-										<span class="text-gray-400">-</span>
-									{/if}
-								</td>
-								<!-- Total Owed: amount + carry (what needs to be collected) -->
-								<td class="py-3 text-right">
-									{#if player.totalOwed > 0}
-										<span class="font-medium text-red-600">${player.totalOwed.toFixed(2)}</span>
-									{:else if player.amount < 0}
-										<span class="font-medium text-green-600">-${Math.abs(player.amount).toFixed(2)}</span>
-									{:else}
-										<span class="text-gray-400">-</span>
-									{/if}
-								</td>
-								<!-- Balance: for carried players show totalOwed, otherwise roster balance -->
-								<td class="py-3 text-right">
-									{#if player.carried}
-										<span class="rounded bg-orange-50 px-1.5 py-0.5 text-xs font-medium text-orange-600">
-											${player.totalOwed.toFixed(2)}
-										</span>
-									{:else if rosterBalance > 0}
-										<span class="rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-600">
-											${rosterBalance.toFixed(2)}
-										</span>
-									{:else}
-										<span class="text-gray-400">-</span>
-									{/if}
-								</td>
-								<!-- Result: this week only (player perspective) -->
-								<td class="py-3 text-right font-medium {player.playerResult >= 0 ? 'text-green-600' : 'text-red-600'}" title="Player's perspective (this week only)">
-									{player.playerResult >= 0 ? '+' : ''}{player.playerResult}
-								</td>
+								{/each}
 								<td class="py-3 text-right">
 									<div class="flex justify-end gap-1">
 										<Button
