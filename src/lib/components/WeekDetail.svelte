@@ -69,11 +69,17 @@
 			if (data.note !== undefined) player.note = data.note;
 			if (data.carried) {
 				player.carryOver(data.carry_amount ?? 0);
-				// Pay off carry: mark the full carry+amount as paid and clear carry state
+				// Pay off carry: flat total paid, vig applied to full carry+amount
 				if (data.pay_off_carry) {
-					const totalOwed = (data.carry_amount ?? 0) + (data.amount > 0 ? data.amount : 0);
-					player.markPaid(totalOwed);
+					const carryPaid = data.carry_amount ?? 0;
+					const base = carryPaid + (data.amount > 0 ? data.amount : 0);
+					player.amount = base;
+					player.markPaid(base);
 					player.clearCarry();
+					// Clear the carry balance on the roster player too
+					if (carryPaid > 0) {
+						appStore.recordCarryPayment(player.account_number, carryPaid, 'Paid off via week entry');
+					}
 				}
 			} else {
 				player.clearCarry();
@@ -92,8 +98,17 @@
 	const handlePayOffCarry = (id: string) => {
 		const player = week.getPlayer(id);
 		if (!player) return;
-		player.markPaid(player.totalOwed);
+		// Flat total: carry + this week's amount. Vig (15%) is applied to this full amount.
+		const total = player.totalOwed;
+		const carryPaid = player.carry_amount;
+		// Set amount to the full total so the vig getter computes 15% of the full balance
+		player.amount = total;
+		player.markPaid(total);
 		player.clearCarry();
+		// Clear the carry balance on the roster player too
+		if (carryPaid > 0) {
+			appStore.recordCarryPayment(player.account_number, carryPaid, 'Paid off via week entry');
+		}
 		week.calculateTotals();
 		appStore.save();
 	};

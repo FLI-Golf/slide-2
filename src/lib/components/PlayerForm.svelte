@@ -127,7 +127,7 @@
 							<div>
 								<span class="text-sm font-medium text-orange-800">Pay off carry this week</span>
 								<p class="text-xs text-orange-600">
-									Total owed: ${(carry_amount + (amountType === 'in' ? amountValue : 0)).toFixed(2)} — marks as paid and clears carry
+									Paying ${(carry_amount + (amountType === 'in' ? amountValue : 0)).toFixed(2)} (15% vig of ${((carry_amount + (amountType === 'in' ? amountValue : 0)) * 0.15).toFixed(2)} applied to week)
 								</p>
 							</div>
 						</label>

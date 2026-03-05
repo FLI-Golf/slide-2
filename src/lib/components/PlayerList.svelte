@@ -193,7 +193,7 @@
 															onchange={() => onPayOffCarry(player.id)}
 														/>
 														<span class="text-xs font-medium text-orange-700">
-															Pay off carry (${player.totalOwed.toFixed(2)})
+															Pay off carry — ${player.totalOwed.toFixed(2)} (incl. 15% vig)
 														</span>
 													</label>
 												{/if}
