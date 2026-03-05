@@ -6,7 +6,7 @@
 
 	interface Props {
 		player?: PlayerWeek;
-		onSave: (data: { name: string; account_number: number; amount: number; note: string; carried: boolean; carry_amount: number }) => void;
+		onSave: (data: { name: string; account_number: number; amount: number; note: string; carried: boolean; carry_amount: number; pay_off_carry?: boolean }) => void;
 		onCancel: () => void;
 	}
 
@@ -19,6 +19,11 @@
 	let note = $state(player?.note ?? '');
 	let carried = $state(player?.carried ?? false);
 	let carry_amount = $state(player?.carry_amount ?? 0);
+	let pay_off_carry = $state(false);
+
+	const isEditing = $derived(!!player);
+	// Only show pay-off option when editing an existing carried player
+	const showPayOffCarry = $derived(isEditing && carried);
 
 	const handleSubmit = (e: Event) => {
 		e.preventDefault();
@@ -29,11 +34,10 @@
 			amount,
 			note,
 			carried,
-			carry_amount
+			carry_amount,
+			pay_off_carry: showPayOffCarry ? pay_off_carry : false
 		});
 	};
-
-	const isEditing = $derived(!!player);
 </script>
 
 <Card class="w-full max-w-md">
@@ -113,6 +117,21 @@
 							bind:value={carry_amount}
 						/>
 					</div>
+					{#if showPayOffCarry}
+						<label class="mt-3 flex cursor-pointer items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
+							<input
+								type="checkbox"
+								bind:checked={pay_off_carry}
+								class="h-4 w-4 rounded border-gray-300"
+							/>
+							<div>
+								<span class="text-sm font-medium text-orange-800">Pay off carry this week</span>
+								<p class="text-xs text-orange-600">
+									Total owed: ${(carry_amount + (amountType === 'in' ? amountValue : 0)).toFixed(2)} — marks as paid and clears carry
+								</p>
+							</div>
+						</label>
+					{/if}
 				{/if}
 			</div>
 			<div>

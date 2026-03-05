@@ -8,9 +8,10 @@
 		onAddPlayer: () => void;
 		onEditPlayer: (id: string) => void;
 		onDeletePlayer: (id: string) => void;
+		onPayOffCarry?: (id: string) => void;
 	}
 
-	let { players, onAddPlayer, onEditPlayer, onDeletePlayer }: Props = $props();
+	let { players, onAddPlayer, onEditPlayer, onDeletePlayer, onPayOffCarry }: Props = $props();
 
 	type SortField = 'account_number' | 'name' | 'amount' | 'vig' | 'carry_in' | 'total_owed' | 'balance' | 'result';
 	type SortDirection = 'asc' | 'desc';
@@ -184,6 +185,18 @@
 											</div>
 											{#if player.carried}
 												<p class="text-xs text-orange-600">Carrying from prev week — excluded from In/Vig/Result</p>
+												{#if onPayOffCarry}
+													<label class="mt-1 flex cursor-pointer items-center gap-1.5">
+														<input
+															type="checkbox"
+															class="h-3.5 w-3.5 rounded border-orange-300 accent-orange-600"
+															onchange={() => onPayOffCarry(player.id)}
+														/>
+														<span class="text-xs font-medium text-orange-700">
+															Pay off carry (${player.totalOwed.toFixed(2)})
+														</span>
+													</label>
+												{/if}
 											{/if}
 											{#if player.note}
 												<p class="text-xs text-gray-500">{player.note}</p>

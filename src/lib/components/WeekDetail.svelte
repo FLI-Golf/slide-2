@@ -59,7 +59,7 @@
 		appStore.save();
 	};
 
-	const handleEditPlayer = (data: { name: string; account_number: number; amount: number; note?: string; carried?: boolean; carry_amount?: number }) => {
+	const handleEditPlayer = (data: { name: string; account_number: number; amount: number; note?: string; carried?: boolean; carry_amount?: number; pay_off_carry?: boolean }) => {
 		if (!editingPlayerId) return;
 		const player = week.getPlayer(editingPlayerId);
 		if (player) {
@@ -69,6 +69,12 @@
 			if (data.note !== undefined) player.note = data.note;
 			if (data.carried) {
 				player.carryOver(data.carry_amount ?? 0);
+				// Pay off carry: mark the full carry+amount as paid and clear carry state
+				if (data.pay_off_carry) {
+					const totalOwed = (data.carry_amount ?? 0) + (data.amount > 0 ? data.amount : 0);
+					player.markPaid(totalOwed);
+					player.clearCarry();
+				}
 			} else {
 				player.clearCarry();
 			}
@@ -80,6 +86,15 @@
 
 	const handleDeletePlayer = (id: string) => {
 		week.removePlayer(id);
+		appStore.save();
+	};
+
+	const handlePayOffCarry = (id: string) => {
+		const player = week.getPlayer(id);
+		if (!player) return;
+		player.markPaid(player.totalOwed);
+		player.clearCarry();
+		week.calculateTotals();
 		appStore.save();
 	};
 
@@ -259,6 +274,7 @@
 								onAddPlayer={() => (showAddPlayer = true)}
 								onEditPlayer={(id) => (editingPlayerId = id)}
 								onDeletePlayer={handleDeletePlayer}
+								onPayOffCarry={handlePayOffCarry}
 							/>
 						</PlayerDropZone>
 					{/if}
